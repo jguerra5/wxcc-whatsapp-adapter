@@ -308,7 +308,7 @@
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
 const CONFIG = {
-  clientId:    "C0b956c157469b71cdcab2d1f9a4bc68c0462ed2446b66a0ca11297d3b2e57037",
+  clientId:    "TU_CLIENT_ID_AQUI",
   redirectUri: "https://jguerra5.github.io/wxcc-whatsapp-adapter/callback.html",
   authUrl:     "https://webexapis.com/v1/authorize",
   tokenUrl:    "https://webexapis.com/v1/access_token",
@@ -438,15 +438,20 @@ async function exchangeCode(code, returnedState) {
     toast("Error de seguridad: state mismatch"); return;
   }
   try {
-    const res = await fetch(CONFIG.tokenUrl, {
+    // Call our Netlify serverless function (keeps client_secret secure)
+    const res = await fetch("/.netlify/functions/token-exchange", {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code", client_id: CONFIG.clientId,
-        code, redirect_uri: CONFIG.redirectUri, code_verifier: verifier||"",
-      }).toString(),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code,
+        code_verifier:  verifier || "",
+        redirect_uri:   CONFIG.redirectUri,
+      }),
     });
-    if (!res.ok) throw new Error("Token exchange " + res.status);
+    if (!res.ok) {
+      const err = await res.json().catch(()=>({}));
+      throw new Error(err.error || "Token exchange " + res.status);
+    }
     const data = await res.json();
     accessToken = data.access_token;
     sessionStorage.setItem("wa_token",  accessToken);
