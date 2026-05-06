@@ -309,7 +309,7 @@
 // ── CONFIG ─────────────────────────────────────────────────────────────────
 const CONFIG = {
   clientId:    "TU_CLIENT_ID_AQUI",
-  redirectUri: "https://sensational-peony-7636e0.netlify.app/callback.html",
+  redirectUri: "https://jguerra5.github.io/wxcc-whatsapp-adapter/callback.html",
   authUrl:     "https://webexapis.com/v1/authorize",
   tokenUrl:    "https://webexapis.com/v1/access_token",
   baseApi:     "https://api.wxcc-us1.cisco.com",
@@ -381,24 +381,28 @@ async function startLogin() {
   $loginBtn.disabled = true;
   $loginBtn.textContent = "Abriendo Webex...";
   try {
-    const verifier   = genVerifier();
-    const challenge  = await genChallenge(verifier);
-    const state      = genState();
-    sessionStorage.setItem("wa_verifier", verifier);
-    sessionStorage.setItem("wa_state",    state);
+    const verifier  = genVerifier();
+    const challenge = await genChallenge(verifier);
+
+    // Encode verifier inside state so callback.html can pass it back
+    // Format: "VERIFIER|RANDOMSTATE"
+    const randomPart = genState();
+    const state      = btoa(verifier) + "." + randomPart;
 
     const params = new URLSearchParams({
-      response_type: "code", client_id: CONFIG.clientId,
-      redirect_uri: CONFIG.redirectUri, scope: CONFIG.scopes,
-      state, code_challenge: challenge, code_challenge_method: "S256",
+      response_type:         "code",
+      client_id:             CONFIG.clientId,
+      redirect_uri:          CONFIG.redirectUri,
+      scope:                 CONFIG.scopes,
+      state,
+      code_challenge:        challenge,
+      code_challenge_method: "S256",
     });
 
-    // We are outside LWC sandbox — window.open works here!
-    const popup = window.open(
-      CONFIG.authUrl + "?" + params.toString(),
-      "webex_login",
-      "width=500,height=620,left=200,top=80"
-    );
+    const authUrl = CONFIG.authUrl + "?" + params.toString();
+    console.log("[WA] Opening OAuth popup:", authUrl);
+
+    const popup = window.open(authUrl, "webex_login", "width=500,height=620,left=200,top=80");
 
     if (!popup) {
       toast("Permite popups para este sitio en tu navegador");
@@ -411,20 +415,25 @@ async function startLogin() {
     window.addEventListener("message", async function handler(e) {
       if (!e.data?.wa_code) return;
       window.removeEventListener("message", handler);
-      popup.close();
+      try { popup.close(); } catch(e) {}
       await exchangeCode(e.data.wa_code, e.data.wa_state);
     });
 
-    // Also poll in case postMessage doesn't fire
+    // Poll for popup closed
     const timer = setInterval(()=>{
-      if (popup.closed) {
-        clearInterval(timer);
-        $loginBtn.disabled = false;
-        $loginBtn.textContent = "Conectar con Webex";
-      }
+      try {
+        if (popup.closed) {
+          clearInterval(timer);
+          if ($loginBtn.disabled) {
+            $loginBtn.disabled = false;
+            $loginBtn.textContent = "Conectar con Webex";
+          }
+        }
+      } catch(e) { clearInterval(timer); }
     }, 1000);
 
   } catch(e) {
+    console.error("[WA] startLogin error:", e);
     toast("Error iniciando login: " + e.message);
     $loginBtn.disabled = false;
     $loginBtn.textContent = "Conectar con Webex";
@@ -432,20 +441,23 @@ async function startLogin() {
 }
 
 async function exchangeCode(code, returnedState) {
-  const verifier = sessionStorage.getItem("wa_verifier");
-  const state    = sessionStorage.getItem("wa_state");
-  if (state && returnedState && state !== returnedState) {
-    toast("Error de seguridad: state mismatch"); return;
-  }
   try {
+    // Extract verifier from state (format: "base64(verifier).randompart")
+    let verifier = "";
+    if (returnedState && returnedState.includes(".")) {
+      const b64part = returnedState.split(".")[0];
+      try { verifier = atob(b64part); } catch(e) { verifier = ""; }
+    }
+    console.log("[WA] Exchanging code, verifier length:", verifier.length);
+
     // Call our Netlify serverless function (keeps client_secret secure)
     const res = await fetch("/.netlify/functions/token-exchange", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         code,
-        code_verifier:  verifier || "",
-        redirect_uri:   CONFIG.redirectUri,
+        code_verifier: verifier,
+        redirect_uri:  CONFIG.redirectUri,
       }),
     });
     if (!res.ok) {
@@ -456,10 +468,9 @@ async function exchangeCode(code, returnedState) {
     accessToken = data.access_token;
     sessionStorage.setItem("wa_token",  accessToken);
     sessionStorage.setItem("wa_expiry", String(Date.now()+(data.expires_in-60)*1000));
-    sessionStorage.removeItem("wa_verifier");
-    sessionStorage.removeItem("wa_state");
     await onAuthenticated();
   } catch(e) {
+    console.error("[WA] exchangeCode error:", e);
     toast("Error completando login: " + e.message);
     $loginBtn.disabled = false;
     $loginBtn.textContent = "Conectar con Webex";
