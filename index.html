@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WhatsApp · Webex CC</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --wa-green:   #25D366;
+      --wa-dark:    #075E54;
+      --bg:         #0b141a;
+      --surface:    #1f2c34;
+      --surface2:   #2a3942;
+      --text:       #e9edef;
+      --text-muted: #8696a0;
+      --border:     #374045;
+      --danger:     #f28b82;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+    }
+
+    /* ── Loading ── */
+    #loading {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      height: 100%; gap: 14px; color: var(--text-muted); font-size: 13px;
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--wa-green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Login ── */
+    #login {
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      height: 100%; gap: 18px; padding: 28px; text-align: center;
+    }
+    .logo {
+      width: 64px; height: 64px;
+      background: var(--wa-green); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .logo svg { width: 36px; height: 36px; fill: white; }
+    .login-title { font-size: 17px; font-weight: 700; color: var(--text); }
+    .login-sub   { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+    .login-btn {
+      background: var(--wa-green); color: #000;
+      border: none; border-radius: 24px;
+      padding: 11px 28px; font-size: 14px; font-weight: 700;
+      cursor: pointer; width: 100%; max-width: 220px;
+      transition: background 0.2s;
+    }
+    .login-btn:hover    { background: #1ebe5d; }
+    .login-btn:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+
+    /* ── Main app ── */
+    #app {
+      display: none; flex-direction: column; height: 100%;
+    }
+
+    /* Header */
+    .header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .header-icon {
+      width: 34px; height: 34px;
+      background: var(--wa-green); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .header-icon svg { width: 18px; height: 18px; fill: white; }
+    .header-info  { flex: 1; min-width: 0; }
+    .header-name  { font-size: 14px; font-weight: 600; color: var(--text); }
+    .header-state { font-size: 11px; color: var(--text-muted); }
+    .dot {
+      display: inline-block; width: 6px; height: 6px;
+      border-radius: 50%; background: var(--text-muted);
+      margin-right: 4px; vertical-align: middle;
+    }
+    .dot.on  { background: var(--wa-green); }
+    .dot.busy{ background: #FFA500; }
+    .logout-btn {
+      background: none; border: 1px solid var(--border);
+      color: var(--text-muted); border-radius: 6px;
+      padding: 3px 9px; font-size: 11px; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .logout-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* Task list */
+    .panel-label {
+      padding: 7px 14px; font-size: 10px; font-weight: 700;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-muted); background: var(--surface);
+      border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .task-list { flex: 1; overflow-y: auto; }
+    .task-list::-webkit-scrollbar { width: 4px; }
+    .task-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .task-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; cursor: pointer;
+      transition: background 0.15s;
+      border-left: 3px solid transparent;
+    }
+    .task-item:hover   { background: var(--surface2); }
+    .task-item.active  { background: var(--surface2); border-left-color: var(--wa-green); }
+    .task-item.incoming{ border-left-color: #FFA500; animation: blink 1s infinite; }
+    @keyframes blink {
+      0%,100% { border-left-color: #FFA500; }
+      50%      { border-left-color: transparent; }
+    }
+    .avatar {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--surface2); border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 700; color: var(--wa-green);
+      flex-shrink: 0; text-transform: uppercase;
+    }
+    .task-meta { flex: 1; min-width: 0; }
+    .task-name {
+      font-size: 13px; font-weight: 600; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .task-preview {
+      font-size: 11px; color: var(--text-muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;
+    }
+    .task-time { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+    .badge {
+      background: var(--wa-green); color: #000;
+      font-size: 10px; font-weight: 700;
+      border-radius: 10px; padding: 1px 5px; flex-shrink: 0;
+    }
+
+    /* Chat */
+    #chat { display: none; flex-direction: column; height: 100%; }
+    .chat-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 12px; background: var(--surface);
+      border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .back-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-muted); display: flex; align-items: center;
+      padding: 3px; border-radius: 4px; transition: color 0.15s;
+    }
+    .back-btn:hover { color: var(--text); }
+    .chat-name { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; min-width: 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chat-sub  { font-size: 11px; color: var(--wa-green); }
+    .chat-actions { display: flex; gap: 5px; }
+    .act-btn {
+      background: none; border: none; cursor: pointer;
+      padding: 5px 9px; border-radius: 6px;
+      font-size: 11px; font-weight: 600; transition: all 0.15s;
+    }
+    .act-btn.accept { color: var(--wa-green); border: 1px solid var(--wa-green); }
+    .act-btn.accept:hover { background: var(--wa-green); color: #000; }
+    .act-btn.end    { color: var(--danger);   border: 1px solid var(--danger); }
+    .act-btn.end:hover    { background: var(--danger); color: #fff; }
+    .act-btn.wrap   { color: #FFA500; border: 1px solid #FFA500; }
+
+    .messages {
+      flex: 1; overflow-y: auto; padding: 10px 12px;
+      display: flex; flex-direction: column; gap: 5px;
+    }
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .msg {
+      max-width: 82%; padding: 6px 11px; border-radius: 8px;
+      font-size: 13px; line-height: 1.4; word-break: break-word;
+    }
+    .msg.customer { background: var(--surface2); align-self: flex-start; border-radius: 0 8px 8px 8px; }
+    .msg.agent    { background: #005c4b;          align-self: flex-end;   border-radius: 8px 8px 0 8px; }
+    .msg-sender   { font-size: 10px; color: var(--wa-green); font-weight: 600; margin-bottom: 2px; }
+    .msg-time     { font-size: 10px; color: var(--text-muted); text-align: right; margin-top: 2px; }
+    .sys-msg {
+      align-self: center; font-size: 11px; color: var(--text-muted);
+      background: var(--surface); border-radius: 12px; padding: 3px 10px;
+    }
+
+    .composer {
+      display: flex; align-items: flex-end; gap: 7px;
+      padding: 9px 12px; background: var(--surface);
+      border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    textarea {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 18px; padding: 8px 13px; color: var(--text);
+      font-size: 13px; font-family: inherit; resize: none;
+      min-height: 36px; max-height: 100px; outline: none;
+      transition: border-color 0.15s;
+    }
+    textarea:focus { border-color: var(--wa-green); }
+    textarea::placeholder { color: var(--text-muted); }
+    .send-btn {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--wa-green); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background 0.15s;
+    }
+    .send-btn:hover    { background: #1ebe5d; }
+    .send-btn:disabled { background: var(--border); cursor: not-allowed; }
+    .send-btn svg { fill: #000; width: 16px; height: 16px; }
+
+    .empty {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px; color: var(--text-muted); padding: 24px; text-align: center;
+    }
+    .empty svg { width: 44px; height: 44px; opacity: 0.25; }
+    .empty-title { font-size: 14px; font-weight: 600; }
+    .empty-sub   { font-size: 12px; }
+
+    .toast {
+      position: fixed; bottom: 70px; left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface2); color: var(--text);
+      padding: 7px 14px; border-radius: 20px; font-size: 12px;
+      border: 1px solid var(--border); pointer-events: none;
+      opacity: 0; transition: opacity 0.3s; white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="spinner"></div>
+  <span>Iniciando...</span>
+</div>
+
+<!-- Login -->
+<div id="login">
+  <div class="logo">
+    <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+  </div>
+  <div class="login-title">WhatsApp · Webex CC</div>
+  <div class="login-sub">Inicia sesión con tu cuenta de Webex para gestionar conversaciones de WhatsApp.</div>
+  <button class="login-btn" id="loginBtn">Conectar con Webex</button>
+</div>
+
+<!-- Main app -->
+<div id="app">
+  <div class="header">
+    <div class="header-icon">
+      <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+    </div>
+    <div class="header-info">
+      <div class="header-name" id="agentName">Agente</div>
+      <div class="header-state"><span class="dot on" id="stateDot"></span><span id="stateLabel">Conectado</span></div>
+    </div>
+    <button class="logout-btn" id="logoutBtn">Salir</button>
+  </div>
+
+  <!-- Task list view -->
+  <div id="taskView" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+    <div class="panel-label">Conversaciones WhatsApp</div>
+    <div class="task-list" id="taskList"></div>
+  </div>
+
+  <!-- Chat view -->
+  <div id="chat">
+    <div class="chat-header">
+      <button class="back-btn" id="backBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+          <path d="M19 12H5M12 5l-7 7 7 7"/>
+        </svg>
+      </button>
+      <div style="flex:1;min-width:0;">
+        <div class="chat-name" id="chatName">Cliente</div>
+        <div class="chat-sub" id="chatSub">WhatsApp</div>
+      </div>
+      <div class="chat-actions" id="chatActions"></div>
+    </div>
+    <div class="messages" id="messages"></div>
+    <div class="composer" id="composer">
+      <textarea id="msgInput" placeholder="Escribe un mensaje..." rows="1"></textarea>
+      <button class="send-btn" id="sendBtn" disabled>
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ─────────────────────────────────────────────────────────────────
+const CONFIG = {
+  clientId:    "C0b956c157469b71cdcab2d1f9a4bc68c0462ed2446b66a0ca11297d3b2e57037",
+  redirectUri: "https://jguerra5.github.io/wxcc-whatsapp-adapter/callback.html",
+  authUrl:     "https://webexapis.com/v1/authorize",
+  tokenUrl:    "https://webexapis.com/v1/access_token",
+  baseApi:     "https://api.wxcc-us1.cisco.com",
+  scopes:      "cjp:config_read cjp:config_write spark:people_read",
+};
+
+// ── State ───────────────────────────────────────────────────────────────────
+let accessToken  = null;
+let agentName    = "Agente";
+let tasks        = new Map();   // taskId → task
+let messages     = new Map();   // taskId → msg[]
+let activeTaskId = null;
+let pollInterval = null;
+
+// ── DOM refs ────────────────────────────────────────────────────────────────
+const $loading  = document.getElementById("loading");
+const $login    = document.getElementById("login");
+const $app      = document.getElementById("app");
+const $loginBtn = document.getElementById("loginBtn");
+const $logoutBtn= document.getElementById("logoutBtn");
+const $taskList = document.getElementById("taskList");
+const $taskView = document.getElementById("taskView");
+const $chat     = document.getElementById("chat");
+const $chatName = document.getElementById("chatName");
+const $chatSub  = document.getElementById("chatSub");
+const $chatActs = document.getElementById("chatActions");
+const $messages = document.getElementById("messages");
+const $msgInput = document.getElementById("msgInput");
+const $sendBtn  = document.getElementById("sendBtn");
+const $backBtn  = document.getElementById("backBtn");
+const $agentName= document.getElementById("agentName");
+const $toast    = document.getElementById("toast");
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function show(el)  { el.style.display = "flex"; }
+function hide(el)  { el.style.display = "none"; }
+function ftime(ts) { return new Date(ts||Date.now()).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}); }
+function initials(n){ return ((n||"?").split(" ").map(w=>w[0]).join("").slice(0,2)).toUpperCase(); }
+function isWA(t)   {
+  const ct = (t.channelType||t.mediaType||"").toLowerCase();
+  const mt = (t.mediaSubtype||t.channelSubtype||t.origin||"").toLowerCase();
+  return ct==="social"||mt==="whatsapp"||ct==="whatsapp";
+}
+function toast(msg, ms=3000) {
+  $toast.textContent = msg; $toast.classList.add("show");
+  setTimeout(()=>$toast.classList.remove("show"), ms);
+}
+function scrollBottom() {
+  setTimeout(()=>{ $messages.scrollTop = $messages.scrollHeight; }, 50);
+}
+function pushMsg(taskId, msg) {
+  if (!messages.has(taskId)) messages.set(taskId, []);
+  messages.get(taskId).push(msg);
+}
+
+// ── PKCE ────────────────────────────────────────────────────────────────────
+function genVerifier() {
+  const a = new Uint8Array(48); crypto.getRandomValues(a);
+  return btoa(String.fromCharCode(...a)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
+}
+async function genChallenge(v) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v));
+  return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
+}
+function genState() { return Math.random().toString(36).slice(2)+Date.now().toString(36); }
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+async function startLogin() {
+  $loginBtn.disabled = true;
+  $loginBtn.textContent = "Abriendo Webex...";
+  try {
+    const verifier   = genVerifier();
+    const challenge  = await genChallenge(verifier);
+    const state      = genState();
+    sessionStorage.setItem("wa_verifier", verifier);
+    sessionStorage.setItem("wa_state",    state);
+
+    const params = new URLSearchParams({
+      response_type: "code", client_id: CONFIG.clientId,
+      redirect_uri: CONFIG.redirectUri, scope: CONFIG.scopes,
+      state, code_challenge: challenge, code_challenge_method: "S256",
+    });
+
+    // We are outside LWC sandbox — window.open works here!
+    const popup = window.open(
+      CONFIG.authUrl + "?" + params.toString(),
+      "webex_login",
+      "width=500,height=620,left=200,top=80"
+    );
+
+    if (!popup) {
+      toast("Permite popups para este sitio en tu navegador");
+      $loginBtn.disabled = false;
+      $loginBtn.textContent = "Conectar con Webex";
+      return;
+    }
+
+    // Listen for code from callback.html via postMessage
+    window.addEventListener("message", async function handler(e) {
+      if (!e.data?.wa_code) return;
+      window.removeEventListener("message", handler);
+      popup.close();
+      await exchangeCode(e.data.wa_code, e.data.wa_state);
+    });
+
+    // Also poll in case postMessage doesn't fire
+    const timer = setInterval(()=>{
+      if (popup.closed) {
+        clearInterval(timer);
+        $loginBtn.disabled = false;
+        $loginBtn.textContent = "Conectar con Webex";
+      }
+    }, 1000);
+
+  } catch(e) {
+    toast("Error iniciando login: " + e.message);
+    $loginBtn.disabled = false;
+    $loginBtn.textContent = "Conectar con Webex";
+  }
+}
+
+async function exchangeCode(code, returnedState) {
+  const verifier = sessionStorage.getItem("wa_verifier");
+  const state    = sessionStorage.getItem("wa_state");
+  if (state && returnedState && state !== returnedState) {
+    toast("Error de seguridad: state mismatch"); return;
+  }
+  try {
+    const res = await fetch(CONFIG.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code", client_id: CONFIG.clientId,
+        code, redirect_uri: CONFIG.redirectUri, code_verifier: verifier||"",
+      }).toString(),
+    });
+    if (!res.ok) throw new Error("Token exchange " + res.status);
+    const data = await res.json();
+    accessToken = data.access_token;
+    sessionStorage.setItem("wa_token",  accessToken);
+    sessionStorage.setItem("wa_expiry", String(Date.now()+(data.expires_in-60)*1000));
+    sessionStorage.removeItem("wa_verifier");
+    sessionStorage.removeItem("wa_state");
+    await onAuthenticated();
+  } catch(e) {
+    toast("Error completando login: " + e.message);
+    $loginBtn.disabled = false;
+    $loginBtn.textContent = "Conectar con Webex";
+  }
+}
+
+function restoreSession() {
+  const token  = sessionStorage.getItem("wa_token");
+  const expiry = parseInt(sessionStorage.getItem("wa_expiry")||"0");
+  if (token && Date.now() < expiry) { accessToken = token; return true; }
+  return false;
+}
+
+function logout() {
+  accessToken = null;
+  sessionStorage.removeItem("wa_token");
+  sessionStorage.removeItem("wa_expiry");
+  if (pollInterval) clearInterval(pollInterval);
+  tasks.clear(); messages.clear(); activeTaskId = null;
+  hide($app); show($login);
+}
+
+// ── API ──────────────────────────────────────────────────────────────────────
+async function api(path, method="GET", body=null) {
+  const opts = { method, headers: { Authorization: "Bearer "+accessToken } };
+  if (body) { opts.headers["Content-Type"]="application/json"; opts.body=JSON.stringify(body); }
+  const res = await fetch(CONFIG.baseApi+path, opts);
+  if (!res.ok) throw new Error(method+" "+path+" → "+res.status);
+  return res.json();
+}
+
+async function loadAgentInfo() {
+  try {
+    const p = await fetch("https://webexapis.com/v1/people/me",
+      { headers: { Authorization: "Bearer "+accessToken } }).then(r=>r.json());
+    agentName = p.displayName || p.emails?.[0] || "Agente";
+    $agentName.textContent = agentName;
+  } catch(e) {}
+}
+
+async function loadTasks() {
+  try {
+    let list = [];
+    try { const d = await api("/v1/tasks?status=active&channelType=social"); list = d.data||d.tasks||[]; }
+    catch(e) { const d = await api("/v1/tasks?status=active"); list = d.data||d.tasks||[]; }
+    const waList = list.filter(isWA);
+    const fresh  = new Set(waList.map(t=>t.taskId||t.id));
+    for (const t of waList) {
+      const id = t.taskId||t.id;
+      if (!tasks.has(id)) { tasks.set(id,{...t,taskId:id}); messages.set(id,[]); pushMsg(id,{type:"sys",text:"Nueva conversación de WhatsApp",ts:Date.now()}); }
+    }
+    for (const [id,t] of tasks) {
+      if (!fresh.has(id) && t.status!=="ended") { tasks.set(id,{...t,status:"ended"}); pushMsg(id,{type:"sys",text:"Conversación finalizada",ts:Date.now()}); }
+    }
+    renderTaskList();
+    if (activeTaskId) renderChat();
+  } catch(e) { console.warn("loadTasks:", e.message); }
+}
+
+async function sendMsg(taskId, text) {
+  await api("/v1/tasks/"+taskId+"/messages","POST",{message:{text}});
+}
+async function acceptTask(taskId) { await api("/v1/tasks/"+taskId+"/accept","POST",{}); }
+async function endTask(taskId)    { await api("/v1/tasks/"+taskId+"/end","POST",{}); }
+async function wrapTask(taskId)   { await api("/v1/tasks/"+taskId+"/wrapup","POST",{}); }
+
+// ── After auth ───────────────────────────────────────────────────────────────
+async function onAuthenticated() {
+  hide($login); hide($loading); show($app);
+  await loadAgentInfo();
+  await loadTasks();
+  pollInterval = setInterval(loadTasks, 8000);
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function renderTaskList() {
+  const list = [...tasks.values()];
+  if (list.length === 0) {
+    $taskList.innerHTML = `
+      <div class="empty">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        <div class="empty-title">Sin conversaciones activas</div>
+        <div class="empty-sub">Los mensajes de WhatsApp aparecerán aquí</div>
+      </div>`;
+    return;
+  }
+  $taskList.innerHTML = list.map(t => {
+    const id      = t.taskId;
+    const name    = t.customerName||t.from||t.ani||"Cliente";
+    const msgs    = messages.get(id)||[];
+    const last    = msgs.filter(m=>m.type!=="sys").slice(-1)[0];
+    const preview = last?.text||"Nueva conversación";
+    const ts      = last ? ftime(last.ts) : ftime();
+    const unread  = msgs.filter(m=>m.type==="customer").length;
+    const inc     = t.status==="incoming";
+    return `<div class="task-item${inc?" incoming":""}" data-id="${id}">
+      <div class="avatar">${initials(name)}</div>
+      <div class="task-meta">
+        <div class="task-name">${name}</div>
+        <div class="task-preview">${inc?"⚡ Entrante — ":""}${preview}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+        <div class="task-time">${ts}</div>
+        ${unread>0?`<div class="badge">${unread}</div>`:""}
+      </div>
+    </div>`;
+  }).join("");
+
+  $taskList.querySelectorAll(".task-item").forEach(el=>{
+    el.addEventListener("click",()=>openChat(el.dataset.id));
+  });
+}
+
+function openChat(taskId) {
+  activeTaskId = taskId;
+  const t    = tasks.get(taskId);
+  const name = t?.customerName||t?.from||t?.ani||"Cliente";
+  $chatName.textContent = name;
+  $chatSub.textContent  = "WhatsApp · "+(t?.status||"active");
+  renderChatActions(t);
+  renderChat();
+  hide($taskView); show($chat);
+  scrollBottom();
+}
+
+function renderChatActions(t) {
+  const status = t?.status||"active";
+  if (status==="incoming") {
+    $chatActs.innerHTML = `<button class="act-btn accept" id="acceptBtn">✓ Aceptar</button>`;
+    document.getElementById("acceptBtn").onclick = async()=>{
+      await acceptTask(activeTaskId);
+      const task = tasks.get(activeTaskId);
+      if(task) tasks.set(activeTaskId,{...task,status:"active"});
+      pushMsg(activeTaskId,{type:"sys",text:"Conversación aceptada",ts:Date.now()});
+      renderChatActions(tasks.get(activeTaskId));
+      renderChat();
+    };
+  } else if (status==="ended") {
+    $chatActs.innerHTML = `<button class="act-btn wrap" id="wrapBtn">⏹ Wrap-up</button>`;
+    document.getElementById("wrapBtn").onclick = async()=>{
+      await wrapTask(activeTaskId); tasks.delete(activeTaskId);
+      activeTaskId=null; hide($chat); show($taskView); renderTaskList();
+    };
+  } else {
+    $chatActs.innerHTML = `<button class="act-btn end" id="endBtn">✕ Finalizar</button>`;
+    document.getElementById("endBtn").onclick = async()=>{
+      await endTask(activeTaskId);
+      const task = tasks.get(activeTaskId);
+      if(task) tasks.set(activeTaskId,{...task,status:"ended"});
+      pushMsg(activeTaskId,{type:"sys",text:"Conversación finalizada",ts:Date.now()});
+      renderChatActions(tasks.get(activeTaskId));
+      renderChat();
+    };
+  }
+}
+
+function renderChat() {
+  const msgs = messages.get(activeTaskId)||[];
+  $messages.innerHTML = msgs.length===0
+    ? `<div class="sys-msg">Inicia la conversación</div>`
+    : msgs.map(m=>{
+        if(m.type==="sys") return `<div class="sys-msg">${m.text}</div>`;
+        const cls = m.type==="agent"?"agent":"customer";
+        return `<div class="msg ${cls}">
+          ${m.type==="customer"?`<div class="msg-sender">${m.sender||"Cliente"}</div>`:""}
+          ${m.text}
+          <div class="msg-time">${ftime(m.ts)}</div>
+        </div>`;
+      }).join("");
+  const ended = tasks.get(activeTaskId)?.status==="ended";
+  document.getElementById("composer").style.display = ended?"none":"flex";
+  scrollBottom();
+}
+
+// ── Events ───────────────────────────────────────────────────────────────────
+$loginBtn.addEventListener("click", startLogin);
+$logoutBtn.addEventListener("click", logout);
+$backBtn.addEventListener("click", ()=>{ activeTaskId=null; hide($chat); show($taskView); renderTaskList(); });
+
+$msgInput.addEventListener("input", e=>{
+  $sendBtn.disabled = !e.target.value.trim();
+  e.target.style.height="auto";
+  e.target.style.height=Math.min(e.target.scrollHeight,100)+"px";
+});
+$msgInput.addEventListener("keydown", e=>{
+  if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); if(!$sendBtn.disabled) doSend(); }
+});
+$sendBtn.addEventListener("click", doSend);
+
+async function doSend() {
+  const text = $msgInput.value.trim();
+  if(!text||!activeTaskId) return;
+  $sendBtn.disabled=true;
+  try {
+    await sendMsg(activeTaskId, text);
+    pushMsg(activeTaskId,{type:"agent",text,sender:agentName,ts:Date.now()});
+    $msgInput.value=""; $msgInput.style.height="auto";
+    renderChat();
+  } catch(e) { toast("Error al enviar: "+e.message); $sendBtn.disabled=false; }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+(function init() {
+  if (restoreSession()) {
+    hide($loading); onAuthenticated();
+  } else {
+    hide($loading); show($login);
+  }
+})();
+</script>
+</body>
+</html>
